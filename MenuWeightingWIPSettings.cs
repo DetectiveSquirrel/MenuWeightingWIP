@@ -6,12 +6,19 @@ using Newtonsoft.Json;
 using SharpDX;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 
 namespace MenuWeightingWIP;
 
 public class MenuWeightingWIPSettings : ISettings
 {
+    public ToggleNode Enable { get; set; } = new(false);
+
+    // Load last saved for both on initialization as its less confusing
+    private const string OverwritePopup = "Overwrite Confirmation";
+
     private static readonly IReadOnlyList<(string Id, string Name)> MobDict = new List<(string, string)>
     {
         ("Mob_1", "Mob 1"),
@@ -62,21 +69,142 @@ public class MenuWeightingWIPSettings : ISettings
         ("Mod_27", "Mod_human_text_here 27")
     };
 
-    public Dictionary<string, Dictionary<string, float>> ModMobWeightings = [];
+    private static List<string> _files = [];
+    public string _fileSaveName = string.Empty;
+    public string _selectedFileName = string.Empty;
 
     private string selectedModId;
 
+    public NonUser NonUserData { get; set; } = new();
+
+    public class NonUser
+    {
+        public string ModMobWeightingLastSaved { get; set; } = "";
+    }
+
+    public Dictionary<string, Dictionary<string, float>> ModMobWeightings { get; set; } = [];
+
+    [JsonIgnore]
+    public CustomNode ModsConfig { get; }
+
+    [JsonIgnore]
+    public CustomNode ModWeights { get; }
+
     public MenuWeightingWIPSettings()
     {
-        InitializeModMobWeightings();
-        string modFilter = "", mobFilter = "";
 
-        Mods = new CustomNode
+
+
+        InitializeModMobWeightings();
+        ModsConfig = new CustomNode
         {
             DrawDelegate = () =>
             {
-                if (!ImGui.TreeNode("Mod - Mob Weighting Configuration"))
+                if (!ImGui.CollapsingHeader(
+        $"Load / Save##{MenuWeightingWIP.Main.Name}Load / Save",
+        ImGuiTreeNodeFlags.DefaultOpen
+    ))
                 {
+                    return;
+                }
+
+                ImGui.Indent();
+                ImGui.InputTextWithHint("##SaveAs", "File Path...", ref _fileSaveName, 100);
+                ImGui.SameLine();
+
+                if (ImGui.Button("Save To File"))
+                {
+                    _files = GetFiles();
+
+                    // Sanitize the file name by replacing invalid characters
+                    foreach (var c in Path.GetInvalidFileNameChars())
+                        _fileSaveName = _fileSaveName.Replace(c, '_');
+
+                    if (_fileSaveName == string.Empty)
+                    {
+                        // Log error when the file name is empty
+                    }
+                    else if (_files.Contains(_fileSaveName))
+                    {
+                        ImGui.OpenPopup(OverwritePopup);
+                    }
+                    else
+                    {
+                        SaveFile(ModMobWeightings, $"{_fileSaveName}.json");
+                    }
+                }
+
+                ImGui.Separator();
+
+                if (ImGui.BeginCombo("Load File##LoadFile", _selectedFileName))
+                {
+                    _files = GetFiles();
+
+                    foreach (var fileName in _files)
+                    {
+                        var isSelected = _selectedFileName == fileName;
+
+                        if (ImGui.Selectable(fileName, isSelected))
+                        {
+                            _selectedFileName = fileName;
+                            _fileSaveName = fileName;
+                            LoadFile(fileName);
+                        }
+
+                        if (isSelected)
+                        {
+                            ImGui.SetItemDefaultFocus();
+                        }
+                    }
+
+                    ImGui.EndCombo();
+                }
+
+                ImGui.Separator();
+
+                if (ImGui.Button("Open Crafting Template Folder"))
+                {
+                    var configDir = MenuWeightingWIP.Main.ConfigDirectory;
+                    var directoryToOpen = Directory.Exists(configDir);
+
+                    if (!directoryToOpen)
+                    {
+                        // Log error when the config directory doesn't exist
+                    }
+
+                    if (configDir != null)
+                    {
+                        Process.Start("explorer.exe", configDir);
+                    }
+                }
+
+                if (ShowButtonPopup(OverwritePopup, ["Are you sure?", "STOP"], out var saveSelectedIndex))
+                {
+                    if (saveSelectedIndex == 0)
+                    {
+                        SaveFile(ModMobWeightings, $"{_fileSaveName}.json");
+                    }
+                }
+
+                ImGui.Unindent();
+            }
+        };
+        string modFilter = "", mobFilter = "";
+
+        ModWeights = new CustomNode
+        {
+            DrawDelegate = () =>
+            {
+                if (!ImGui.CollapsingHeader("Modifier & Monster Weighting"))
+                {
+                    return;
+                }
+
+                ImGui.Indent();
+
+                if (ImGui.Button("Reset Weights"))
+                {
+                    ResetModMobWeightings();
                     return;
                 }
 
@@ -99,7 +227,7 @@ public class MenuWeightingWIPSettings : ISettings
                                    .Where(t => t.Name.Contains(modFilter, StringComparison.InvariantCultureIgnoreCase))
                                    .ToList();
 
-                for (int i = 0; i < filteredMods.Count; i++)
+                for (var i = 0; i < filteredMods.Count; i++)
                 {
                     var (modId, modName) = filteredMods[i];
                     HighlightSelected(modId, modName, selectedModId == modId, () => selectedModId = modId);
@@ -115,15 +243,10 @@ public class MenuWeightingWIPSettings : ISettings
                 ImGui.TableNextColumn();
                 DisplayMobWeightings(mobFilter);
                 ImGui.EndTable();
-                ImGui.TreePop();
+                ImGui.Unindent();
             }
         };
     }
-
-    [JsonIgnore]
-    public CustomNode Mods { get; }
-
-    public ToggleNode Enable { get; set; } = new(false);
 
     private static void HighlightSelected(string modId, string modName, bool isSelected, Action onClick)
     {
@@ -194,4 +317,88 @@ public class MenuWeightingWIPSettings : ISettings
 
         selectedModId = ModDict.FirstOrDefault().Id;
     }
+
+    private void ResetModMobWeightings()
+    {
+        ModMobWeightings = [];
+        InitializeModMobWeightings();
+    }
+
+    #region Save / Load Section
+
+    private void DrawFileOptions()
+    {
+
+    }
+
+    public static bool ShowButtonPopup(string popupId, List<string> items, out int selectedIndex)
+    {
+        selectedIndex = -1;
+        var isItemClicked = false;
+        var showPopup = true;
+
+        if (!ImGui.BeginPopupModal(
+                popupId,
+                ref showPopup,
+                ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize
+            ))
+        {
+            return false;
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (ImGui.Button(items[i]))
+            {
+                selectedIndex = i;
+                isItemClicked = true;
+                ImGui.CloseCurrentPopup();
+            }
+
+            ImGui.SameLine();
+        }
+
+        ImGui.EndPopup();
+        return isItemClicked;
+    }
+
+    public void SaveFile(Dictionary<string, Dictionary<string, float>> input, string filePath)
+    {
+        try
+        {
+            var fullPath = Path.Combine(MenuWeightingWIP.Main.ConfigDirectory, filePath);
+            var jsonString = JsonConvert.SerializeObject(input, Formatting.Indented);
+            File.WriteAllText(fullPath, jsonString);
+        }
+        catch (Exception e) { }
+    }
+
+    public void LoadFile(string fileName)
+    {
+        try
+        {
+            var fullPath = Path.Combine(MenuWeightingWIP.Main.ConfigDirectory, $"{fileName}.json");
+            var fileContent = File.ReadAllText(fullPath);
+
+            ModMobWeightings
+                = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, float>>>(fileContent);
+        }
+        catch (Exception e) { }
+    }
+
+    public List<string> GetFiles()
+    {
+        var fileList = new List<string>();
+
+        try
+        {
+            var dir = new DirectoryInfo(MenuWeightingWIP.Main.ConfigDirectory);
+            fileList = dir.GetFiles().Select(file => Path.GetFileNameWithoutExtension(file.Name)).ToList();
+        }
+        catch (Exception e) { }
+
+        return fileList;
+    }
+
+    #endregion
 }
