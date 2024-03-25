@@ -52,7 +52,14 @@ public class MenuWeightingWIPSettings : ISettings
         ("Mod_17", "Mod_human_text_here 17"),
         ("Mod_18", "Mod_human_text_here 18"),
         ("Mod_19", "Mod_human_text_here 19"),
-        ("Mod_20", "Mod_human_text_here 20")
+        ("Mod_20", "Mod_human_text_here 20"),
+        ("Mod_21", "Mod_human_text_here 21"),
+        ("Mod_22", "Mod_human_text_here 22"),
+        ("Mod_23", "Mod_human_text_here 23"),
+        ("Mod_24", "Mod_human_text_here 24"),
+        ("Mod_25", "Mod_human_text_here 25"),
+        ("Mod_26", "Mod_human_text_here 26"),
+        ("Mod_27", "Mod_human_text_here 27")
     };
 
     public Dictionary<string, Dictionary<string, float>> ModMobWeightings = [];
@@ -92,8 +99,17 @@ public class MenuWeightingWIPSettings : ISettings
                                    .Where(t => t.Name.Contains(modFilter, StringComparison.InvariantCultureIgnoreCase))
                                    .ToList();
 
-                foreach (var (modId, modName) in filteredMods)
+                for (int i = 0; i < filteredMods.Count; i++)
+                {
+                    var (modId, modName) = filteredMods[i];
                     HighlightSelected(modId, modName, selectedModId == modId, () => selectedModId = modId);
+
+                    // Add a separator for all but the last item
+                    if (i < filteredMods.Count - 1)
+                    {
+                        ImGui.Separator();
+                    }
+                }
 
                 // Monsters column
                 ImGui.TableNextColumn();
