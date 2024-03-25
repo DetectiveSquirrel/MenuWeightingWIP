@@ -102,7 +102,7 @@ public class MenuWeightingWIPSettings : ISettings
                 var _selectedFileName = ModMobWeightingLastSelected;
 
                 if (!ImGui.CollapsingHeader(
-                        $"Load / Save##{MenuWeightingWIP.Main.Name}Load / Save",
+                        $"Load / Save Hot Swappable Configurations##{MenuWeightingWIP.Main.Name}Load / Save",
                         ImGuiTreeNodeFlags.DefaultOpen
                     ))
                 {
@@ -201,12 +201,16 @@ public class MenuWeightingWIPSettings : ISettings
         {
             DrawDelegate = () =>
             {
-                if (!ImGui.CollapsingHeader("Modifier & Monster Weighting"))
+                if (!ImGui.CollapsingHeader("Hot Swappable Configurations"))
                 {
                     return;
                 }
 
                 ImGui.Indent();
+                if (!ImGui.TreeNode("Modifier & Monster Weighting"))
+                {
+                    return;
+                }
 
                 if (ImGui.Button("[x] Clear All"))
                 {
@@ -257,6 +261,7 @@ public class MenuWeightingWIPSettings : ISettings
                 ImGui.TableNextColumn();
                 DisplayMobWeightings(mobFilter);
                 ImGui.EndTable();
+                ImGui.TreePop();
                 ImGui.Unindent();
             }
         };
