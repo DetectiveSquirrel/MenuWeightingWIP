@@ -47,7 +47,7 @@ namespace MenuWeightingWIP
         public override void Render()
         {
             //Any Imgui or Graphics calls go here. This is called after Tick
-            Graphics.DrawText($"Plugin {GetType().Name} is working.", new Vector2(100, 100), Color.Red);
+            //Graphics.DrawText($"Plugin {GetType().Name} is working.", new Vector2(100, 100), Color.Red);
         }
 
         public override void EntityAdded(Entity entity)

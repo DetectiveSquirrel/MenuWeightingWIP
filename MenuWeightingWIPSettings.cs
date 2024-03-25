@@ -88,14 +88,12 @@ public class MenuWeightingWIPSettings : ISettings
                 // Modifiers column
                 ImGui.TableNextColumn();
 
-                ModDict.Where(t => t.Name.Contains(modFilter, StringComparison.InvariantCultureIgnoreCase)).ToList()
-                       .ForEach(
-                           mod =>
-                           {
-                               var (modId, modName) = mod;
-                               HighlightButton(modId, modName, selectedModId == modId, () => selectedModId = modId);
-                           }
-                       );
+                var filteredMods = ModDict
+                                   .Where(t => t.Name.Contains(modFilter, StringComparison.InvariantCultureIgnoreCase))
+                                   .ToList();
+
+                foreach (var (modId, modName) in filteredMods)
+                    HighlightSelected(modId, modName, selectedModId == modId, () => selectedModId = modId);
 
                 // Monsters column
                 ImGui.TableNextColumn();
@@ -111,21 +109,11 @@ public class MenuWeightingWIPSettings : ISettings
 
     public ToggleNode Enable { get; set; } = new(false);
 
-    private void HighlightButton(string modId, string modName, bool isSelected, Action onClick)
+    private static void HighlightSelected(string modId, string modName, bool isSelected, Action onClick)
     {
-        if (isSelected)
-        {
-            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetColorU32(ImGuiCol.ButtonHovered));
-        }
-
-        if (ImGui.Button($"{modName}##{modId}"))
+        if (ImGui.Selectable($"{modName}##{modId}", isSelected))
         {
             onClick.Invoke();
-        }
-
-        if (isSelected)
-        {
-            ImGui.PopStyleColor();
         }
     }
 
@@ -171,7 +159,7 @@ public class MenuWeightingWIPSettings : ISettings
         ImGui.Text(mobName);
     }
 
-    private bool HighlightWeightChange(float weight)
+    private static bool HighlightWeightChange(float weight)
     {
         if (weight == 0)
         {
