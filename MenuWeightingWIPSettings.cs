@@ -17,6 +17,7 @@ public class MenuWeightingWIPSettings : ISettings
     public ToggleNode Enable { get; set; } = new(false);
 
     // Load last saved for both on initialization as its less confusing
+    private const string ClearSettingPopup = "Clear Confirmation";
     private const string OverwritePopup = "Overwrite Confirmation";
 
     private static readonly IReadOnlyList<(string Id, string Name)> MobDict = new List<(string, string)>
@@ -70,19 +71,18 @@ public class MenuWeightingWIPSettings : ISettings
     };
 
     private static List<string> _files = [];
-    public string _fileSaveName = string.Empty;
-    public string _selectedFileName = string.Empty;
 
     private string selectedModId;
+    public string ModMobWeightingLastSaved { get; set; } = "";
+    public string ModMobWeightingLastSelected { get; set; } = "";
 
-    public NonUser NonUserData { get; set; } = new();
+    public Swappable HotSwap { get; set; } = new();
 
-    public class NonUser
+    public class Swappable
     {
-        public string ModMobWeightingLastSaved { get; set; } = "";
+        public Dictionary<string, Dictionary<string, float>> ModMobWeightings { get; set; } = [];
     }
 
-    public Dictionary<string, Dictionary<string, float>> ModMobWeightings { get; set; } = [];
 
     [JsonIgnore]
     public CustomNode ModsConfig { get; }
@@ -100,10 +100,13 @@ public class MenuWeightingWIPSettings : ISettings
         {
             DrawDelegate = () =>
             {
+                var _fileSaveName = ModMobWeightingLastSaved;
+                var _selectedFileName = ModMobWeightingLastSelected;
+
                 if (!ImGui.CollapsingHeader(
-        $"Load / Save##{MenuWeightingWIP.Main.Name}Load / Save",
-        ImGuiTreeNodeFlags.DefaultOpen
-    ))
+                        $"Load / Save##{MenuWeightingWIP.Main.Name}Load / Save",
+                        ImGuiTreeNodeFlags.DefaultOpen
+                    ))
                 {
                     return;
                 }
@@ -130,7 +133,7 @@ public class MenuWeightingWIPSettings : ISettings
                     }
                     else
                     {
-                        SaveFile(ModMobWeightings, $"{_fileSaveName}.json");
+                        SaveFile(HotSwap.ModMobWeightings, $"{_fileSaveName}.json");
                     }
                 }
 
@@ -182,9 +185,12 @@ public class MenuWeightingWIPSettings : ISettings
                 {
                     if (saveSelectedIndex == 0)
                     {
-                        SaveFile(ModMobWeightings, $"{_fileSaveName}.json");
+                        SaveFile(HotSwap.ModMobWeightings, $"{_fileSaveName}.json");
                     }
                 }
+
+                ModMobWeightingLastSaved = _fileSaveName;
+                ModMobWeightingLastSelected = _selectedFileName;
 
                 ImGui.Unindent();
             }
@@ -202,10 +208,18 @@ public class MenuWeightingWIPSettings : ISettings
 
                 ImGui.Indent();
 
-                if (ImGui.Button("Reset Weights"))
+                if (ImGui.Button("[x] Clear All"))
                 {
-                    ResetModMobWeightings();
-                    return;
+                    ImGui.OpenPopup(ClearSettingPopup);
+                }
+
+                if (ShowButtonPopup(ClearSettingPopup, ["Are you sure?", "STOP"], out var clearSelectedIndex))
+                {
+                    if (clearSelectedIndex == 0)
+                    {
+                        ResetModMobWeightings();
+                        return;
+                    }
                 }
 
                 ImGui.InputTextWithHint("Modifier Filter##ModFilter", "Filter Modifiers here", ref modFilter, 100);
@@ -258,7 +272,7 @@ public class MenuWeightingWIPSettings : ISettings
 
     private void DisplayMobWeightings(string mobFilter)
     {
-        if (string.IsNullOrEmpty(selectedModId) || !ModMobWeightings.TryGetValue(selectedModId, out var mobWeightings))
+        if (string.IsNullOrEmpty(selectedModId) || !HotSwap.ModMobWeightings.TryGetValue(selectedModId, out var mobWeightings))
         {
             return;
         }
@@ -313,23 +327,18 @@ public class MenuWeightingWIPSettings : ISettings
     private void InitializeModMobWeightings()
     {
         foreach (var mod in ModDict)
-            ModMobWeightings[mod.Id] = MobDict.ToDictionary(mob => mob.Id, mob => 0f);
+            HotSwap.ModMobWeightings[mod.Id] = MobDict.ToDictionary(mob => mob.Id, mob => 0f);
 
         selectedModId = ModDict.FirstOrDefault().Id;
     }
 
     private void ResetModMobWeightings()
     {
-        ModMobWeightings = [];
+        HotSwap.ModMobWeightings = [];
         InitializeModMobWeightings();
     }
 
     #region Save / Load Section
-
-    private void DrawFileOptions()
-    {
-
-    }
 
     public static bool ShowButtonPopup(string popupId, List<string> items, out int selectedIndex)
     {
@@ -380,7 +389,7 @@ public class MenuWeightingWIPSettings : ISettings
             var fullPath = Path.Combine(MenuWeightingWIP.Main.ConfigDirectory, $"{fileName}.json");
             var fileContent = File.ReadAllText(fullPath);
 
-            ModMobWeightings
+            HotSwap.ModMobWeightings
                 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, float>>>(fileContent);
         }
         catch (Exception e) { }
