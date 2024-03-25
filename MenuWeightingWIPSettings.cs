@@ -16,9 +16,6 @@ public class MenuWeightingWIPSettings : ISettings
 {
     public ToggleNode Enable { get; set; } = new(false);
 
-    // Load last saved for both on initialization as its less confusing
-    private const string ClearSettingPopup = "Clear Confirmation";
-    private const string OverwritePopup = "Overwrite Confirmation";
 
     private static readonly IReadOnlyList<(string Id, string Name)> MobDict = new List<(string, string)>
     {
@@ -70,11 +67,13 @@ public class MenuWeightingWIPSettings : ISettings
         ("Mod_27", "Mod_human_text_here 27")
     };
 
-    private static List<string> _files = [];
-
     private string selectedModId;
+
+    // Load last saved for both on initialization as its less confusing
     public string ModMobWeightingLastSaved { get; set; } = "";
     public string ModMobWeightingLastSelected { get; set; } = "";
+    private const string ClearSettingPopup = "Clear Confirmation";
+    private const string OverwritePopup = "Overwrite Confirmation";
 
     public Swappable HotSwap { get; set; } = new();
 
@@ -92,10 +91,9 @@ public class MenuWeightingWIPSettings : ISettings
 
     public MenuWeightingWIPSettings()
     {
-
-
-
+        List<string> files;
         InitializeModMobWeightings();
+
         ModsConfig = new CustomNode
         {
             DrawDelegate = () =>
@@ -117,23 +115,25 @@ public class MenuWeightingWIPSettings : ISettings
 
                 if (ImGui.Button("Save To File"))
                 {
-                    _files = GetFiles();
+                    files = GetFiles();
 
                     // Sanitize the file name by replacing invalid characters
-                    foreach (var c in Path.GetInvalidFileNameChars())
-                        _fileSaveName = _fileSaveName.Replace(c, '_');
+                    _fileSaveName = Path.GetInvalidFileNameChars().Aggregate(
+                        _fileSaveName,
+                        (current, c) => current.Replace(c, '_')
+                    );
 
                     if (_fileSaveName == string.Empty)
                     {
                         // Log error when the file name is empty
                     }
-                    else if (_files.Contains(_fileSaveName))
+                    else if (files.Contains(_fileSaveName))
                     {
                         ImGui.OpenPopup(OverwritePopup);
                     }
                     else
                     {
-                        SaveFile(HotSwap.ModMobWeightings, $"{_fileSaveName}.json");
+                        SaveFile(HotSwap, $"{_fileSaveName}.json");
                     }
                 }
 
@@ -141,9 +141,9 @@ public class MenuWeightingWIPSettings : ISettings
 
                 if (ImGui.BeginCombo("Load File##LoadFile", _selectedFileName))
                 {
-                    _files = GetFiles();
+                    files = GetFiles();
 
-                    foreach (var fileName in _files)
+                    foreach (var fileName in files)
                     {
                         var isSelected = _selectedFileName == fileName;
 
@@ -185,16 +185,16 @@ public class MenuWeightingWIPSettings : ISettings
                 {
                     if (saveSelectedIndex == 0)
                     {
-                        SaveFile(HotSwap.ModMobWeightings, $"{_fileSaveName}.json");
+                        SaveFile(HotSwap, $"{_fileSaveName}.json");
                     }
                 }
 
                 ModMobWeightingLastSaved = _fileSaveName;
                 ModMobWeightingLastSelected = _selectedFileName;
-
                 ImGui.Unindent();
             }
         };
+
         string modFilter = "", mobFilter = "";
 
         ModWeights = new CustomNode
@@ -371,7 +371,7 @@ public class MenuWeightingWIPSettings : ISettings
         return isItemClicked;
     }
 
-    public void SaveFile(Dictionary<string, Dictionary<string, float>> input, string filePath)
+    public void SaveFile(Swappable input, string filePath)
     {
         try
         {
@@ -389,8 +389,8 @@ public class MenuWeightingWIPSettings : ISettings
             var fullPath = Path.Combine(MenuWeightingWIP.Main.ConfigDirectory, $"{fileName}.json");
             var fileContent = File.ReadAllText(fullPath);
 
-            HotSwap.ModMobWeightings
-                = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, float>>>(fileContent);
+            HotSwap
+                = JsonConvert.DeserializeObject<Swappable>(fileContent);
         }
         catch (Exception e) { }
     }
